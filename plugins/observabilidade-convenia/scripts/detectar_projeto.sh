@@ -1,8 +1,11 @@
 #!/bin/bash
-# Detector de projeto: hook do Claude Code (SessionStart e PostToolUse de Skill).
-# Descobre em que projeto a pessoa está e manda um evento pequeno ao Grafana,
-# com o mesmo ID de sessão da telemetria nativa. Assim o painel cruza uso x projeto
-# mesmo em pastas que a própria pessoa criou.
+# Detector de projeto: hook do Claude Code. Descobre em que projeto a pessoa está e manda
+# um evento pequeno ao Grafana, com o mesmo ID de sessão da telemetria nativa. Assim o painel
+# cruza uso x projeto mesmo em pastas que a própria pessoa criou.
+#   SessionStart         -> sessao_projeto
+#   PostToolUse (Skill)  -> skill_projeto, skill.acionamento=modelo   (o Claude escolheu a skill)
+#   UserPromptExpansion  -> skill_projeto, skill.acionamento=digitado (a pessoa digitou /comando)
+#   SubagentStart        -> subagente_projeto, agent.name             (um subagente começou)
 #
 # Regras de segurança (testadas em testes_detector.sh):
 #  - NUNCA imprime nada: saída de hook de início de sessão vira contexto e gastaria token.
@@ -65,9 +68,25 @@ done
 
 evento="$(printf '%s' "$entrada" | jq -r '.hook_event_name // empty')"
 sessao="$(printf '%s' "$entrada" | jq -r '.session_id // empty')"
-skill="$(printf '%s' "$entrada" | jq -r '.tool_input.skill // empty')"
 pasta="${CLAUDE_PROJECT_DIR:-$(printf '%s' "$entrada" | jq -r '.cwd // empty')}"
 [ -n "$sessao" ] && [ -n "$pasta" ] || exit 0
+
+# Que evento mandar. Só nomes: nunca o texto do pedido nem os argumentos do comando.
+skill=""; acionamento=""; fonte=""; agente=""
+case "$evento" in
+  SessionStart) nome="sessao_projeto" ;;
+  PostToolUse)          # o Claude escolheu usar uma skill (ferramenta Skill)
+    skill="$(printf '%s' "$entrada" | jq -r '.tool_input.skill // empty')"
+    [ -n "$skill" ] || exit 0; nome="skill_projeto"; acionamento="modelo" ;;
+  UserPromptExpansion)  # a pessoa digitou /comando (skill, comando ou skill de plugin)
+    skill="$(printf '%s' "$entrada" | jq -r '.command_name // empty')"
+    fonte="$(printf '%s' "$entrada" | jq -r '.command_source // empty')"
+    [ -n "$skill" ] || exit 0; nome="skill_projeto"; acionamento="digitado" ;;
+  SubagentStart)        # um subagente começou (Explore, agente da pasta, plugin:agente...)
+    agente="$(printf '%s' "$entrada" | jq -r '.agent_type // empty')"
+    [ -n "$agente" ] || exit 0; nome="subagente_projeto" ;;
+  *) exit 0 ;;
+esac
 
 slug() {  # mesma regra do marcar_projeto.sh
   # Se o iconv não souber transliterar (ex.: Linux Alpine), segue com o texto original.
@@ -95,14 +114,9 @@ case "$pasta" in "$HOME"|"$HOME/"|/) projeto="pasta-pessoal"; origem="pasta" ;; 
 email="$(jq -r '.oauthAccount.emailAddress // empty' "$CONTA" 2>/dev/null)"
 [ -n "$email" ] || email="$(git config user.email 2>/dev/null)"
 
-case "$evento" in
-  SessionStart) nome="sessao_projeto" ;;
-  PostToolUse)  [ -n "$skill" ] || exit 0; nome="skill_projeto" ;;
-  *) exit 0 ;;
-esac
-
 corpo="$(jq -nc --arg ts "$(date +%s)000000000" --arg nome "$nome" --arg sessao "$sessao" \
-  --arg projeto "$projeto" --arg origem "$origem" --arg email "$email" --arg skill "$skill" '
+  --arg projeto "$projeto" --arg origem "$origem" --arg email "$email" --arg skill "$skill" \
+  --arg acionamento "$acionamento" --arg fonte "$fonte" --arg agente "$agente" '
   def a(k; v): {key: k, value: {stringValue: v}};
   {resourceLogs: [{
      resource: {attributes: [a("service.name"; "claude-code-projetos")]},
@@ -110,7 +124,10 @@ corpo="$(jq -nc --arg ts "$(date +%s)000000000" --arg nome "$nome" --arg sessao 
        logRecords: [{timeUnixNano: $ts, body: {stringValue: $nome},
          attributes: ([a("event.name"; $nome), a("session.id"; $sessao), a("projeto"; $projeto),
                        a("origem_projeto"; $origem), a("user.email"; $email)]
-                      + (if $skill != "" then [a("skill.name"; $skill)] else [] end))}]}]}]}')" || exit 0
+                      + (if $skill != "" then [a("skill.name"; $skill)] else [] end)
+                      + (if $acionamento != "" then [a("skill.acionamento"; $acionamento)] else [] end)
+                      + (if $fonte != "" then [a("skill.fonte"; $fonte)] else [] end)
+                      + (if $agente != "" then [a("agent.name"; $agente)] else [] end))}]}]}]}')" || exit 0
 
 # Envio em segundo plano: o Claude Code não espera a rede.
 ( curl -s -o /dev/null --max-time 3 -X POST "${endpoint%/}/v1/logs" \

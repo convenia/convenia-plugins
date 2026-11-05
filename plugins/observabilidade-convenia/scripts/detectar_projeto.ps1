@@ -1,6 +1,7 @@
 ﻿# Detector de projeto (Windows). Mesmo comportamento do detectar_projeto.sh do Mac/Linux.
-# Hook do Claude Code (SessionStart e PostToolUse de Skill): descobre o projeto e manda
-# um evento pequeno ao Grafana com o mesmo ID de sessão da telemetria nativa.
+# Hook do Claude Code (SessionStart, PostToolUse de Skill, UserPromptExpansion e SubagentStart):
+# descobre o projeto e manda um evento pequeno ao Grafana com o mesmo ID de sessão da
+# telemetria nativa. Os eventos e atributos estão descritos no topo do detectar_projeto.sh.
 #
 # Regras: nunca imprime nada (saída de hook de início de sessão vira contexto e gastaria
 # token); sempre sai com 0; o envio vai num processo separado e escondido, com limite de 3 s;
@@ -37,13 +38,25 @@ try {
 
     $evento = $entrada.hook_event_name
     $sessao = $entrada.session_id
-    $skill = $entrada.tool_input.skill
     $pasta = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { $entrada.cwd }
     if (-not $sessao -or -not $pasta) { exit 0 }
 
+    # Que evento mandar. Só nomes: nunca o texto do pedido nem os argumentos do comando.
+    $skill = ''; $acionamento = ''; $fonte = ''; $agente = ''
     switch ($evento) {
         'SessionStart' { $nome = 'sessao_projeto' }
-        'PostToolUse' { if (-not $skill) { exit 0 }; $nome = 'skill_projeto' }
+        'PostToolUse' {            # o Claude escolheu usar uma skill (ferramenta Skill)
+            $skill = [string]$entrada.tool_input.skill
+            if (-not $skill) { exit 0 }; $nome = 'skill_projeto'; $acionamento = 'modelo'
+        }
+        'UserPromptExpansion' {    # a pessoa digitou /comando (skill, comando ou skill de plugin)
+            $skill = [string]$entrada.command_name; $fonte = [string]$entrada.command_source
+            if (-not $skill) { exit 0 }; $nome = 'skill_projeto'; $acionamento = 'digitado'
+        }
+        'SubagentStart' {          # um subagente começou (Explore, agente da pasta, plugin:agente...)
+            $agente = [string]$entrada.agent_type
+            if (-not $agente) { exit 0 }; $nome = 'subagente_projeto'
+        }
         default { exit 0 }
     }
 
@@ -91,7 +104,10 @@ try {
                        @('origem_projeto', $origem), @('user.email', $email))) {
         [void]$atributos.Add((Atributo $par[0] $par[1]))
     }
-    if ($skill) { [void]$atributos.Add((Atributo 'skill.name' $skill)) }
+    foreach ($par in @(@('skill.name', $skill), @('skill.acionamento', $acionamento),
+                       @('skill.fonte', $fonte), @('agent.name', $agente))) {
+        if ($par[1]) { [void]$atributos.Add((Atributo $par[0] $par[1])) }
+    }
 
     $ts = ([DateTimeOffset]::UtcNow.ToUnixTimeSeconds()).ToString() + '000000000'
     $corpo = @{

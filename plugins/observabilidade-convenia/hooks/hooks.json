@@ -14,6 +14,20 @@
           { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/detectar_projeto.sh\"", "timeout": 10, "async": true }
         ]
       }
+    ],
+    "UserPromptExpansion": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/detectar_projeto.sh\"", "timeout": 10, "async": true }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/detectar_projeto.sh\"", "timeout": 10, "async": true }
+        ]
+      }
     ]
   }
 }

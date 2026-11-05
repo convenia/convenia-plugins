@@ -1,7 +1,7 @@
 {
   "name": "observabilidade-convenia",
-  "version": "1.0.2",
-  "description": "Detector de projeto: registra em que projeto cada sessão e cada skill do Claude Code foi usada, para o painel de uso de agentes.",
+  "version": "1.0.3",
+  "description": "Detector de projeto: registra em que projeto cada sessão, skill (escolhida pelo Claude ou digitada como /comando) e subagente do Claude Code foi usado, para o painel de uso de agentes.",
   "author": {
     "name": "Yan Porfirio",
     "email": "yan.porfirio@convenia.com.br"

@@ -1,0 +1,3 @@
+# Scripts sempre com fim de linha Unix (LF), inclusive em máquinas Windows com core.autocrlf=true.
+# Sem isto, o git do Windows entrega o .sh com CRLF; o Git Bash tolera, mas outros bash não.
+*.sh text eol=lf

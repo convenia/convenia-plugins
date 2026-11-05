@@ -3,7 +3,7 @@
     "SessionStart": [
       {
         "hooks": [
-          { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/detectar_projeto.sh\"", "timeout": 10 }
+          { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/detectar_projeto.sh\"", "timeout": 10, "async": true }
         ]
       }
     ],
@@ -11,7 +11,7 @@
       {
         "matcher": "Skill",
         "hooks": [
-          { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/detectar_projeto.sh\"", "timeout": 10 }
+          { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/detectar_projeto.sh\"", "timeout": 10, "async": true }
         ]
       }
     ]

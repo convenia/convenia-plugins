@@ -24,16 +24,25 @@ exec >/dev/null 2>&1   # garante o silêncio, mesmo se algum comando abaixo recl
 # No modo embutido (detector dentro da configuração central), a versão PowerShell vem
 # na mesma linha de comando; aqui só sai, sem ler a entrada, para ela usar.
 # DETECTOR_SO e DETECTOR_POWERSHELL existem só para os testes simularem o Windows no Mac.
-case "${DETECTOR_SO:-$(uname -s 2>/dev/null)}" in
-  MINGW*|MSYS*|CYGWIN*)
+# No Windows, cada processo que o bash abre custa de 0,1 a 0,2 s. Por isso este trecho usa só
+# recursos do próprio bash ($OSTYPE, cortes de texto, read) e abre um único processo: o
+# PowerShell, em segundo plano. Medido no Windows do Bernardo em 05/11/2026: 1.0.1 levava
+# 1,5 a 1,8 s; sem os processos extras (uname, dirname, cat, subshell) cai para ~0,4 s.
+case "${DETECTOR_SO:-$OSTYPE}" in
+  msys*|cygwin*|MINGW*|MSYS*|CYGWIN*)
     [ -n "${DETECTOR_EMBUTIDO:-}" ] && exit 0
-    ps1="$(cd "$(dirname "$0")" && pwd)/detectar_projeto.ps1"
+    # Pasta do script, sem dirname. O Claude Code chama "C:\...\<versão>/scripts/detectar_projeto.sh".
+    barra_inv='\'
+    pasta="${0%/*}"
+    [ "$pasta" = "$0" ] && pasta="${0%"$barra_inv"*}"
+    [ "$pasta" = "$0" ] && pasta=.
+    ps1="$pasta/detectar_projeto.ps1"
     [ -f "$ps1" ] || exit 0
-    # O PowerShell leva de 1 a 7 s para abrir (visto no Windows do Bernardo em 05/11/2026).
-    # Lê a entrada aqui e entrega ao PowerShell em segundo plano: o hook termina na hora.
-    entrada="$(cat)"
-    ( printf '%s' "$entrada" | "${DETECTOR_POWERSHELL:-powershell.exe}" -NoProfile -NonInteractive \
-        -ExecutionPolicy Bypass -File "$ps1" >/dev/null 2>&1 & )
+    # O PowerShell leva de 1 a 7 s para abrir: lê a entrada aqui (read não abre processo) e
+    # entrega ao PowerShell em segundo plano. O hook termina sem esperar por ele.
+    IFS= read -r -d '' entrada || true
+    "${DETECTOR_POWERSHELL:-powershell.exe}" -NoProfile -NonInteractive -ExecutionPolicy Bypass \
+      -File "$ps1" <<< "$entrada" >/dev/null 2>&1 &
     exit 0 ;;
 esac
 

@@ -9,7 +9,7 @@
       "name": "observabilidade-convenia",
       "source": "./plugins/observabilidade-convenia",
       "description": "Detector de projeto: registra em que projeto cada sessão e cada skill do Claude Code foi usada, para o painel de uso de agentes.",
-      "version": "1.0.0"
+      "version": "1.0.1"
     }
   ]
 }

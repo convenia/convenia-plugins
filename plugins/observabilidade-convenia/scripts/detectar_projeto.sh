@@ -23,11 +23,17 @@ exec >/dev/null 2>&1   # garante o silêncio, mesmo se algum comando abaixo recl
 # Windows com Git Bash: repassa para a versão em PowerShell, que não depende do jq.
 # No modo embutido (detector dentro da configuração central), a versão PowerShell vem
 # na mesma linha de comando; aqui só sai, sem ler a entrada, para ela usar.
-case "$(uname -s 2>/dev/null)" in
+# DETECTOR_SO e DETECTOR_POWERSHELL existem só para os testes simularem o Windows no Mac.
+case "${DETECTOR_SO:-$(uname -s 2>/dev/null)}" in
   MINGW*|MSYS*|CYGWIN*)
     [ -n "${DETECTOR_EMBUTIDO:-}" ] && exit 0
     ps1="$(cd "$(dirname "$0")" && pwd)/detectar_projeto.ps1"
-    [ -f "$ps1" ] && powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$ps1"
+    [ -f "$ps1" ] || exit 0
+    # O PowerShell leva de 1 a 7 s para abrir (visto no Windows do Bernardo em 05/11/2026).
+    # Lê a entrada aqui e entrega ao PowerShell em segundo plano: o hook termina na hora.
+    entrada="$(cat)"
+    ( printf '%s' "$entrada" | "${DETECTOR_POWERSHELL:-powershell.exe}" -NoProfile -NonInteractive \
+        -ExecutionPolicy Bypass -File "$ps1" >/dev/null 2>&1 & )
     exit 0 ;;
 esac
 
